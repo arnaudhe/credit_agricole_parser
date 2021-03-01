@@ -9,13 +9,17 @@ COLUMN_CREDIT       = 3
 CA_SYNTAX = [
     {'filter' : 'VIREMENT EN VOTRE FAVEUR', 'format' : 'VIREMENT - {}', 'rtrim' : 1},
     {'filter' : 'VIREMENT EMIS',            'format' : 'VIREMENT - {}', 'rtrim' : 5},
-    {'filter' : 'PAIEMENT PAR CARTE',       'format' : 'CARTE - {}', 'rtrim' : 5}, 
+    {'filter' : 'PAIEMENT PAR CARTE',       'format' : 'CARTE - {}',    'rtrim' : 5}, 
     {'filter' : 'PRELEVEMENT',              'format' : 'PRELEVMT - {}', 'rtrim' : 1}, 
-    {'filter' : 'CHEQUE EMIS',              'format' : 'CHEQUE - {}', 'rtrim' : 1},
+    {'filter' : 'CHEQUE EMIS',              'format' : 'CHEQUE - {}',   'rtrim' : 1},
     {'filter' : 'REGLEMENT',                'format' : 'REGLEMNT - {}', 'rtrim' : 5},
     {'filter' : 'REMBOURSEMENT DE PRET',    'format' : 'RBT PRET - {}', 'rtrim' : 8},
-    {'filter' : 'RETRAIT AU DISTRIBUTEUR',  'format' : 'RETRAIT - {}', 'rtrim' : 12}
+    {'filter' : 'RETRAIT AU DISTRIBUTEUR',  'format' : 'RETRAIT - {}',  'rtrim' : 12}
 ]
+
+def sanitize_date(value):
+    year, month, day, _, _, _ = xlrd.xldate.xldate_as_tuple(value, datemode=0)
+    return '{}/{}/{}'.format(year, month, day)
 
 def sanitize_description(description):
     lines = [line.strip() for line in description.split("\n")]
@@ -24,6 +28,9 @@ def sanitize_description(description):
             return syntax['format'].format(lines[1][:-syntax['rtrim']].strip())[:43].upper()
     # no filter found
     return ' - '.join(lines).upper()
+
+def sanitize_price(price: str):
+    return str(str(price).replace('.', ','))
 
 def find_first_row(sheet):
     row = 0
@@ -42,20 +49,21 @@ debits  = []
 credits = []
 
 while row < sheet.nrows:
-    record = [sheet.cell_value(row, COLUMN_DATE),
-             sanitize_description(sheet.cell_value(row, COLUMN_DESCRIPTION)),
-             str(sheet.cell_value(row, COLUMN_DEBIT)).replace('.', ',')]
-    if record[2] != '':
+    record = { 'date' : sanitize_date(sheet.cell_value(row, COLUMN_DATE)),
+               'description' : sanitize_description(sheet.cell_value(row, COLUMN_DESCRIPTION)),
+               'debit' : sanitize_price(sheet.cell_value(row, COLUMN_DEBIT)),
+               'credit' : sanitize_price(sheet.cell_value(row, COLUMN_CREDIT))}
+    if record['debit'] != '':
+        record.pop('credit')
         debits.append(record)
     else:
-        record[2] = str(sheet.cell_value(row, COLUMN_CREDIT)).replace('.', ',')
+        record.pop('debit')
         credits.append(record)
-
     row = row + 1
 
 debits.reverse()
 credits.reverse()
 
-print('\n'.join(['\t'.join(record) for record in debits]))
+print('\n'.join(['\t'.join(record.values()) for record in debits]))
 print('\n')
-print('\n'.join(['\t'.join(record) for record in credits]))
+print('\n'.join(['\t'.join(record.values()) for record in credits]))
